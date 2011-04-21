@@ -610,6 +610,10 @@
             return $this->_add_simple_where($column_name, '=', $value);
         }
 
+        public function where_eq($column_name, $value) {
+            return $this->_add_simple_where($column_name, '=', $value);
+        }
+
         /**
          * Add a WHERE column != value clause to your query.
          */
@@ -628,7 +632,14 @@
          * Add a WHERE ... LIKE clause to your query.
          */
         public function where_like($column_name, $value) {
-            return $this->_add_simple_where($column_name, 'LIKE', $value);
+            return $this->_add_simple_where($column_name, 'LIKE', "$value");
+        }
+
+        /**
+         * Add a WHERE ... LIKE clause to your query.
+         */
+        public function where_contains($column_name, $value) {
+            return $this->_add_simple_where($column_name, 'LIKE', "%$value%");
         }
 
         /**
@@ -1137,6 +1148,13 @@
 
         public function __isset($key) {
             return isset($this->_data[$key]);
+        }
+
+        function __call($name, $args) {
+            list($field, $operator) = explode('__', $name);
+            $method = "where_$operator";
+            return $this->$method($field, $args[0]);
+            var_dump($field, $operator);
         }
     }
 
