@@ -49,7 +49,7 @@
 
     // Get a list of all contacts from the database
     $count = ORM::for_table('contact')->count();
-    $contact_list = ORM::for_table('contact')->find_many();
+    $contact_list = ORM::for_table('contact')->find_all();
 ?>
 
 <html>

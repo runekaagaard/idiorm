@@ -166,7 +166,7 @@
          * Despite its slightly odd name, this is actually the factory
          * method used to acquire instances of the class. It is named
          * this way for the sake of a readable interface, ie
-         * ORM::for_table('table_name')->find_one()-> etc. As such,
+         * ORM::for_table('table_name')->find_first()-> etc. As such,
          * this will normally be the first method called in a chain.
          */
         public static function for_table($table_name) {
@@ -350,14 +350,8 @@
          * back from your query, and execute it. Will return
          * a single instance of the ORM class, or false if no
          * rows were returned.
-         * As a shortcut, you may supply an ID as a parameter
-         * to this method. This will perform a primary key
-         * lookup on the table.
          */
-        public function find_one($id=null) {
-            if (!is_null($id)) {
-                $this->where_id_is($id);
-            }
+        public function find_first() {
             $this->limit(1);
             $rows = $this->_run();
 
@@ -374,7 +368,7 @@
          * of instances of the ORM class, or an empty array if
          * no rows were returned.
          */
-        public function find_many() {
+        public function find_all() {
             $rows = $this->_run();
             return array_map(array($this, '_create_instance_from_row'), $rows);
         }
@@ -386,7 +380,7 @@
          */
         public function count() {
             $this->select_expr('COUNT(*)', 'count');
-            $result = $this->find_one();
+            $result = $this->find_first();
             return ($result !== false && isset($result->count)) ? (int) $result->count : 0;
         }
 
@@ -592,125 +586,93 @@
             return join(", ", array_fill(0, $number_of_placeholders, "?"));
         }
 
-        /**
-         * Add a WHERE column = value clause to your query. Each time
-         * this is called in the chain, an additional WHERE will be
-         * added, and these will be ANDed together when the final query
-         * is built.
+        /*
+         * Helper methods used to generate where statements. They are used by 
+         * the __call() method like so:
+         * 
+         * MyModel::objects()
+         *  ->columnname__is(42)
+         *  ->columnname__isnt(43)
+         *  ->columnname__contains('Foo')
          */
-        public function where($column_name, $value) {
-            return $this->where_equal($column_name, $value);
-        }
-
-        /**
-         * More explicitly named version of for the where() method.
-         * Can be used if preferred.
-         */
-        public function where_equal($column_name, $value) {
+        
+        private function _where_is($column_name, $value) {
             return $this->_add_simple_where($column_name, '=', $value);
         }
 
-        public function where_eq($column_name, $value) {
-            return $this->_add_simple_where($column_name, '=', $value);
-        }
-
-        /**
-         * Add a WHERE column != value clause to your query.
-         */
-        public function where_not_equal($column_name, $value) {
+        private function _where_isnt($column_name, $value) {
             return $this->_add_simple_where($column_name, '!=', $value);
         }
 
-        /**
-         * Special method to query the table by its primary key
-         */
-        public function where_id_is($id) {
-            return $this->where($this->_get_id_column_name(), $id);
-        }
-
-        /**
-         * Add a WHERE ... LIKE clause to your query.
-         */
-        public function where_like($column_name, $value) {
-            return $this->_add_simple_where($column_name, 'LIKE', "$value");
-        }
-
-        /**
-         * Add a WHERE ... LIKE clause to your query.
-         */
-        public function where_contains($column_name, $value) {
+        private function _where_contains($column_name, $value) {
             return $this->_add_simple_where($column_name, 'LIKE', "%$value%");
         }
 
-        /**
-         * Add where WHERE ... NOT LIKE clause to your query.
-         */
-        public function where_not_like($column_name, $value) {
-            return $this->_add_simple_where($column_name, 'NOT LIKE', $value);
+        private function _where_doesnt_contain($column_name, $value) {
+            return $this->_add_simple_where($column_name, 'NOT LIKE', 
+                                            "%$value%");
+        }
+        
+        private function _where_startswith($column_name, $value) {
+            return $this->_add_simple_where($column_name, 'LIKE', "$value%");
         }
 
-        /**
-         * Add a WHERE ... > clause to your query
-         */
-        public function where_gt($column_name, $value) {
+        private function _where_doesnt_startwith($column_name, $value) {
+            return $this->_add_simple_where($column_name, 'NOT LIKE', 
+                                            "$value%");
+        }
+        
+        private function _where_endswith($column_name, $value) {
+            return $this->_add_simple_where($column_name, 'LIKE', "%$value");
+        }
+
+        private function _where_doesnt_endwith($column_name, $value) {
+            return $this->_add_simple_where($column_name, 'NOT LIKE', 
+                                            "%$value");
+        }
+
+        private function _where_gt($column_name, $value) {
             return $this->_add_simple_where($column_name, '>', $value);
         }
 
-        /**
-         * Add a WHERE ... < clause to your query
-         */
-        public function where_lt($column_name, $value) {
+        private function _where_lt($column_name, $value) {
             return $this->_add_simple_where($column_name, '<', $value);
         }
 
-        /**
-         * Add a WHERE ... >= clause to your query
-         */
-        public function where_gte($column_name, $value) {
+        private function _where_gte($column_name, $value) {
             return $this->_add_simple_where($column_name, '>=', $value);
         }
 
-        /**
-         * Add a WHERE ... <= clause to your query
-         */
-        public function where_lte($column_name, $value) {
+        private function _where_lte($column_name, $value) {
             return $this->_add_simple_where($column_name, '<=', $value);
         }
 
-        /**
-         * Add a WHERE ... IN clause to your query
-         */
-        public function where_in($column_name, $values) {
+        private function _where_is_in($column_name, $values) {
             $column_name = $this->_quote_identifier($column_name);
             $placeholders = $this->_create_placeholders(count($values));
             return $this->_add_where("{$column_name} IN ({$placeholders})", $values);
         }
 
-        /**
-         * Add a WHERE ... NOT IN clause to your query
-         */
-        public function where_not_in($column_name, $values) {
+        private function _where_isnt_in($column_name, $values) {
             $column_name = $this->_quote_identifier($column_name);
             $placeholders = $this->_create_placeholders(count($values));
             return $this->_add_where("{$column_name} NOT IN ({$placeholders})", $values);
         }
 
-        /**
-         * Add a WHERE column IS NULL clause to your query
-         */
-        public function where_null($column_name) {
+        private function _where_is_null($column_name) {
             $column_name = $this->_quote_identifier($column_name);
             return $this->_add_where("{$column_name} IS NULL");
         }
 
-        /**
-         * Add a WHERE column IS NOT NULL clause to your query
-         */
-        public function where_not_null($column_name) {
+        private function _where_isnt_null($column_name) {
             $column_name = $this->_quote_identifier($column_name);
             return $this->_add_where("{$column_name} IS NOT NULL");
         }
-
+        
+        /*
+         * End of where builder methods. 
+         */
+        
         /**
          * Add a raw WHERE clause to the query. The clause should
          * contain question mark placeholders, which will be bound
@@ -719,7 +681,7 @@
         public function where_raw($clause, $parameters=array()) {
             return $this->_add_where($clause, $parameters);
         }
-
+        
         /**
          * Add a LIMIT to the query
          */
@@ -1149,12 +1111,29 @@
         public function __isset($key) {
             return isset($this->_data[$key]);
         }
-
+        
+        /**
+         * Maps the double underscore queries like "name__contains('Foo')" to
+         * the where_XXX methods.
+         * 
+         * @param type $name
+         * @param type $args
+         * @return type 
+         */
         function __call($name, $args) {
-            list($field, $operator) = explode('__', $name);
-            $method = "where_$operator";
-            return $this->$method($field, $args[0]);
-            var_dump($field, $operator);
+            $parts = explode('__', $name);
+            if (count($parts) !== 2) {
+                throw new Exception("The method $name does not exist.");
+            }
+            list($column_name, $operator) = $parts;
+            if ($column_name === 'pk') { 
+                $column_name = $this->_get_id_column_name();
+            }
+            $method_name = "_where_$operator";
+            if (!method_exists($this, $method_name)) {
+                throw new Exception("Where operator '$operator' is invalid.");
+            }
+            array_unshift($args, $column_name);
+            return call_user_func_array(array($this, $method_name), $args);
         }
     }
-
